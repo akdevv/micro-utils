@@ -1,0 +1,420 @@
+#!/bin/bash
+
+# xe - Modular Web Development Script for macOS
+# Supports bun, pnpm, and npm package managers
+
+set -e  # Exit on any error
+
+# Global variables
+PACKAGE_MANAGER=""
+FRONTEND_FLAG=false
+BACKEND_FLAG=false
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Helper function for colored output
+echo_color() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
+}
+
+# Display usage information
+usage() {
+    echo_color "$BLUE" "xe - Modular Web Development Script"
+    echo ""
+    echo "Usage: xe [command] [options]"
+    echo ""
+    echo "Commands:"
+    echo "  install, i     Install dependencies or specific packages"
+    echo "  dev            Start development server"
+    echo "  dev init       Full project initialization (install + prisma + dev)"
+    echo "  build          Build the project"
+    echo "  lint           Run linting"
+    echo "  prisma         Run Prisma commands (generate, db push, db pull)"
+    echo "  shadcn         Manage shadcn/ui components"
+    echo ""
+    echo "Options:"
+    echo "  -f             Frontend mode (default)"
+    echo "  -b             Backend mode"
+    echo ""
+    echo "Examples:"
+    echo "  xe install           Install all dependencies"
+    echo "  xe install axios     Install specific package"
+    echo "  xe i react typescript   Install multiple packages"
+    echo "  xe dev               Start dev server"
+    echo "  xe dev init          Full project initialization"
+    echo "  xe prisma migrate --name my_migration"
+    echo "  xe shadcn add button"
+}
+
+# Detect package manager based on lock files
+detect_package_manager() {
+    if [[ -f "bun.lock" ]]; then
+        PACKAGE_MANAGER="bun"
+    elif [[ -f "pnpm-lock.yaml" ]]; then
+        PACKAGE_MANAGER="pnpm"
+    elif [[ -f "package-lock.json" ]]; then
+        PACKAGE_MANAGER="npm"
+    else
+        echo_color "$RED" "❌ Unsupported or missing package manager. Only bun, pnpm, and npm are supported."
+        exit 1
+    fi
+    
+    echo_color "$GREEN" "📦 Detected package manager: $PACKAGE_MANAGER"
+}
+
+# Check if node_modules exists
+check_node_modules() {
+    if [[ ! -d "node_modules" ]]; then
+        echo_color "$YELLOW" "⚠️  node_modules not found. Run xe install? (y/n)"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            run_install
+        else
+            echo_color "$RED" "❌ Exiting without installing dependencies."
+            exit 1
+        fi
+    fi
+}
+
+# Install dependencies or specific packages
+run_install() {
+    detect_package_manager
+    
+    # Get all arguments after the install command
+    local packages=("${@:2}")
+    
+    if [[ ${#packages[@]} -eq 0 ]]; then
+        # No packages specified - install all dependencies
+        echo_color "$BLUE" "🔧 Installing all dependencies with $PACKAGE_MANAGER..."
+        
+        case $PACKAGE_MANAGER in
+            bun)
+                bun install
+                ;;
+            pnpm)
+                pnpm install
+                ;;
+            npm)
+                npm install
+                ;;
+        esac
+        
+        echo_color "$GREEN" "✅ Dependencies installed successfully!"
+    else
+        # Specific packages provided - install them
+        local package_list="${packages[*]}"
+        echo_color "$BLUE" "📦 Installing packages: $package_list"
+        
+        case $PACKAGE_MANAGER in
+            bun)
+                bun install "${packages[@]}"
+                ;;
+            pnpm)
+                pnpm install "${packages[@]}"
+                ;;
+            npm)
+                npm install "${packages[@]}"
+                ;;
+        esac
+        
+        echo_color "$GREEN" "✅ Packages installed successfully: $package_list"
+    fi
+}
+
+# Start development server
+run_dev() {
+    detect_package_manager
+    
+    # Handle dev subcommands
+    if [[ "$2" == "init" ]]; then
+        echo_color "$BLUE" "🚀 Running full project initialization..."
+        
+        # Step 1: Install dependencies
+        echo_color "$BLUE" "📦 Step 1: Installing dependencies..."
+        run_install
+        
+        # Step 2: Run Prisma commands (if schema exists)
+        if command -v prisma &> /dev/null || [[ -f "prisma/schema.prisma" ]]; then
+            echo_color "$BLUE" "🗃️  Step 2: Setting up Prisma..."
+            run_prisma
+        else
+            echo_color "$YELLOW" "⚠️  Skipping Prisma setup (no schema found)"
+        fi
+        
+        # Step 3: Start dev server
+        echo_color "$BLUE" "🌐 Step 3: Starting development server..."
+    else
+        # Regular dev command - check for node_modules first
+        check_node_modules
+        echo_color "$BLUE" "🌐 Starting development server with $PACKAGE_MANAGER..."
+    fi
+    
+    case $PACKAGE_MANAGER in
+        bun)
+            bun dev
+            ;;
+        pnpm)
+            pnpm dev
+            ;;
+        npm)
+            npm run dev
+            ;;
+    esac
+}
+
+# Build the project
+run_build() {
+    detect_package_manager
+    echo_color "$BLUE" "🔨 Building project with $PACKAGE_MANAGER..."
+    
+    case $PACKAGE_MANAGER in
+        bun)
+            bun build
+            ;;
+        pnpm)
+            pnpm build
+            ;;
+        npm)
+            npm run build
+            ;;
+    esac
+    
+    echo_color "$GREEN" "✅ Build completed successfully!"
+}
+
+# Run linting
+run_lint() {
+    detect_package_manager
+    echo_color "$BLUE" "🧹 Running lint with $PACKAGE_MANAGER..."
+    
+    case $PACKAGE_MANAGER in
+        bun)
+            bun lint
+            ;;
+        pnpm)
+            pnpm lint
+            ;;
+        npm)
+            npm run lint
+            ;;
+    esac
+    
+    echo_color "$GREEN" "✅ Linting completed!"
+}
+
+# Run Prisma commands
+run_prisma() {
+    detect_package_manager
+    
+    # Handle subcommands
+    if [[ "$2" == "migrate" ]]; then
+        if [[ "$3" == "--name" && -n "$4" ]]; then
+            migration_name="$4"
+        else
+            # Generate random migration name
+            migration_name="migration_$(date +%s)"
+        fi
+        
+        echo_color "$BLUE" "🗃️  Running Prisma migration: $migration_name"
+        
+        case $PACKAGE_MANAGER in
+            bun)
+                bun prisma migrate dev --name "$migration_name"
+                ;;
+            pnpm)
+                pnpm prisma migrate dev --name "$migration_name"
+                ;;
+            npm)
+                npx prisma migrate dev --name "$migration_name"
+                ;;
+        esac
+        
+    elif [[ "$2" == "reset" ]]; then
+        echo_color "$BLUE" "🗃️  Resetting Prisma database..."
+        
+        case $PACKAGE_MANAGER in
+            bun)
+                bun prisma migrate reset
+                ;;
+            pnpm)
+                pnpm prisma migrate reset
+                ;;
+            npm)
+                npx prisma migrate reset
+                ;;
+        esac
+        
+    else
+        # Default Prisma commands
+        echo_color "$BLUE" "🗃️  Running Prisma commands with $PACKAGE_MANAGER..."
+        
+        case $PACKAGE_MANAGER in
+            bun)
+                echo_color "$BLUE" "📋 Generating Prisma client..."
+                bun prisma generate
+                echo_color "$BLUE" "📤 Pushing database changes..."
+                bun prisma db push
+                echo_color "$BLUE" "📥 Pulling database schema..."
+                bun prisma db pull
+                ;;
+            pnpm)
+                echo_color "$BLUE" "📋 Generating Prisma client..."
+                pnpm prisma generate
+                echo_color "$BLUE" "📤 Pushing database changes..."
+                pnpm prisma db push
+                echo_color "$BLUE" "📥 Pulling database schema..."
+                pnpm prisma db pull
+                ;;
+            npm)
+                echo_color "$BLUE" "📋 Generating Prisma client..."
+                npx prisma generate
+                echo_color "$BLUE" "📤 Pushing database changes..."
+                npx prisma db push
+                echo_color "$BLUE" "📥 Pulling database schema..."
+                npx prisma db pull
+                ;;
+        esac
+    fi
+    
+    echo_color "$GREEN" "✅ Prisma commands completed!"
+}
+
+# Manage shadcn/ui components
+run_shadcn() {
+    detect_package_manager
+    
+    if [[ "$2" == "init" ]]; then
+        echo_color "$BLUE" "🎨 Initializing shadcn/ui..."
+        
+        case $PACKAGE_MANAGER in
+            bun)
+                bunx --bun shadcn@latest init
+                ;;
+            pnpm)
+                pnpm dlx shadcn@latest init
+                ;;
+            npm)
+                npx shadcn@latest init
+                ;;
+        esac
+        
+    elif [[ "$2" == "add" && -n "$3" ]]; then
+        component_name="$3"
+        echo_color "$BLUE" "🎨 Adding shadcn/ui component: $component_name"
+        
+        case $PACKAGE_MANAGER in
+            bun)
+                bunx --bun shadcn@latest add "$component_name"
+                ;;
+            pnpm)
+                pnpm dlx shadcn@latest add "$component_name"
+                ;;
+            npm)
+                npx shadcn@latest add "$component_name"
+                ;;
+        esac
+        
+    else
+        echo_color "$RED" "❌ Invalid shadcn command. Use 'xe shadcn init' or 'xe shadcn add <component>'"
+        exit 1
+    fi
+    
+    echo_color "$GREEN" "✅ shadcn/ui command completed!"
+}
+
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -f|--frontend)
+                FRONTEND_FLAG=true
+                shift
+                ;;
+            -b|--backend)
+                BACKEND_FLAG=true
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+    
+    # Don't set default flags - let commands handle their own logic
+}
+
+# Main function
+main() {
+    # Parse flags first
+    parse_args "$@"
+    
+    # Get remaining arguments after flag parsing
+    local remaining_args=()
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -f|--frontend|-b|--backend)
+                shift
+                ;;
+            *)
+                remaining_args+=("$1")
+                shift
+                ;;
+        esac
+    done
+    
+    # Set positional parameters to remaining arguments
+    set -- "${remaining_args[@]}"
+    
+    local command=$1
+    
+    # If no command provided, show usage
+    if [[ -z "$command" ]]; then
+        usage
+        exit 1
+    fi
+    
+    # Execute the appropriate command
+    case $command in
+        install|i)
+            run_install "$@"
+            ;;
+        dev)
+            run_dev "$@"
+            ;;
+        build)
+            run_build
+            ;;
+        lint)
+            run_lint
+            ;;
+        prisma)
+            run_prisma "$@"
+            ;;
+        shadcn)
+            run_shadcn "$@"
+            ;;
+        *)
+            echo_color "$RED" "❌ Unknown command: $command"
+            echo ""
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+# Error handling
+trap 'echo_color "$RED" "❌ An error occurred. Exiting."; exit 1' ERR
+
+# Run main function with all arguments
+main "$@"
