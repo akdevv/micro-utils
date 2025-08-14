@@ -47,23 +47,46 @@ usage() {
     echo "  xe install           Install all dependencies"
     echo "  xe install axios     Install specific package"
     echo "  xe i react typescript   Install multiple packages"
+    echo "  xe i -D nodemon      Install dev dependencies"
     echo "  xe dev               Start dev server"
     echo "  xe dev init          Full project initialization"
-    echo "  xe prisma migrate --name my_migration"
-    echo "  xe shadcn add button"
+    echo "  xe prisma migrate dev --name my_migration"
+    echo "  xe shadcn add button --overwrite"
 }
 
 # Detect package manager based on lock files
 detect_package_manager() {
+    # Check current directory first
     if [[ -f "bun.lock" ]]; then
         PACKAGE_MANAGER="bun"
     elif [[ -f "pnpm-lock.yaml" ]]; then
         PACKAGE_MANAGER="pnpm"
     elif [[ -f "package-lock.json" ]]; then
         PACKAGE_MANAGER="npm"
+    elif [[ -f "package.json" ]]; then
+        # package.json exists but no lock file - prompt user
+        echo_color "$YELLOW" "⚠️  No lock file found. Please select package manager:"
+        echo "1) bun"
+        echo "2) pnpm"
+        echo "3) npm"
+        read -r choice
+        case $choice in
+            1) PACKAGE_MANAGER="bun" ;;
+            2) PACKAGE_MANAGER="pnpm" ;;
+            3) PACKAGE_MANAGER="npm" ;;
+            *) PACKAGE_MANAGER="npm" ;;
+        esac
     else
-        echo_color "$RED" "❌ Unsupported or missing package manager. Only bun, pnpm, and npm are supported."
-        exit 1
+        # No package.json in current directory, check client folder
+        if [[ -f "client/package.json" ]]; then
+            echo_color "$BLUE" "📁 Found package.json in client/ directory. Switching to client/"
+            cd client
+            detect_package_manager
+            return
+        else
+            echo_color "$RED" "❌ No package.json found in current directory or client/ subdirectory."
+            exit 1
+        fi
     fi
     
     echo_color "$GREEN" "📦 Detected package manager: $PACKAGE_MANAGER"
@@ -88,10 +111,11 @@ run_install() {
     detect_package_manager
     
     # Get all arguments after the install command
-    local packages=("${@:2}")
+    shift  # Remove 'install' or 'i' from arguments
+    local args=("$@")
     
-    if [[ ${#packages[@]} -eq 0 ]]; then
-        # No packages specified - install all dependencies
+    if [[ ${#args[@]} -eq 0 ]]; then
+        # No arguments specified - install all dependencies
         echo_color "$BLUE" "🔧 Installing all dependencies with $PACKAGE_MANAGER..."
         
         case $PACKAGE_MANAGER in
@@ -108,23 +132,22 @@ run_install() {
         
         echo_color "$GREEN" "✅ Dependencies installed successfully!"
     else
-        # Specific packages provided - install them
-        local package_list="${packages[*]}"
-        echo_color "$BLUE" "📦 Installing packages: $package_list"
+        # Pass all arguments directly to the package manager
+        echo_color "$BLUE" "📦 Running: $PACKAGE_MANAGER install ${args[*]}"
         
         case $PACKAGE_MANAGER in
             bun)
-                bun install "${packages[@]}"
+                bun install "${args[@]}"
                 ;;
             pnpm)
-                pnpm install "${packages[@]}"
+                pnpm install "${args[@]}"
                 ;;
             npm)
-                npm install "${packages[@]}"
+                npm install "${args[@]}"
                 ;;
         esac
         
-        echo_color "$GREEN" "✅ Packages installed successfully: $package_list"
+        echo_color "$GREEN" "✅ Installation completed!"
     fi
 }
 
@@ -132,24 +155,30 @@ run_install() {
 run_dev() {
     detect_package_manager
     
+    # Get all arguments after the dev command
+    shift  # Remove 'dev' from arguments
+    local args=("$@")
+    
     # Handle dev subcommands
-    if [[ "$2" == "init" ]]; then
+    if [[ "${args[0]}" == "init" ]]; then
         echo_color "$BLUE" "🚀 Running full project initialization..."
         
         # Step 1: Install dependencies
         echo_color "$BLUE" "📦 Step 1: Installing dependencies..."
-        run_install
+        run_install install
         
         # Step 2: Run Prisma commands (if schema exists)
         if command -v prisma &> /dev/null || [[ -f "prisma/schema.prisma" ]]; then
             echo_color "$BLUE" "🗃️  Step 2: Setting up Prisma..."
-            run_prisma
+            run_prisma prisma
         else
             echo_color "$YELLOW" "⚠️  Skipping Prisma setup (no schema found)"
         fi
         
         # Step 3: Start dev server
         echo_color "$BLUE" "🌐 Step 3: Starting development server..."
+        # Remove 'init' from args for the actual dev command
+        unset 'args[0]'
     else
         # Regular dev command - check for node_modules first
         check_node_modules
@@ -158,13 +187,13 @@ run_dev() {
     
     case $PACKAGE_MANAGER in
         bun)
-            bun dev
+            bun dev "${args[@]}"
             ;;
         pnpm)
-            pnpm dev
+            pnpm dev "${args[@]}"
             ;;
         npm)
-            npm run dev
+            npm run dev "${args[@]}"
             ;;
     esac
 }
@@ -172,17 +201,22 @@ run_dev() {
 # Build the project
 run_build() {
     detect_package_manager
+    
+    # Get all arguments after the build command
+    shift  # Remove 'build' from arguments
+    local args=("$@")
+    
     echo_color "$BLUE" "🔨 Building project with $PACKAGE_MANAGER..."
     
     case $PACKAGE_MANAGER in
         bun)
-            bun build
+            bun run build "${args[@]}"
             ;;
         pnpm)
-            pnpm build
+            pnpm run build "${args[@]}"
             ;;
         npm)
-            npm run build
+            npm run build "${args[@]}"
             ;;
     esac
     
@@ -192,17 +226,22 @@ run_build() {
 # Run linting
 run_lint() {
     detect_package_manager
+    
+    # Get all arguments after the lint command
+    shift  # Remove 'lint' from arguments
+    local args=("$@")
+    
     echo_color "$BLUE" "🧹 Running lint with $PACKAGE_MANAGER..."
     
     case $PACKAGE_MANAGER in
         bun)
-            bun lint
+            bun lint "${args[@]}"
             ;;
         pnpm)
-            pnpm lint
+            pnpm lint "${args[@]}"
             ;;
         npm)
-            npm run lint
+            npm run lint "${args[@]}"
             ;;
     esac
     
@@ -213,47 +252,13 @@ run_lint() {
 run_prisma() {
     detect_package_manager
     
-    # Handle subcommands
-    if [[ "$2" == "migrate" ]]; then
-        if [[ "$3" == "--name" && -n "$4" ]]; then
-            migration_name="$4"
-        else
-            # Generate random migration name
-            migration_name="migration_$(date +%s)"
-        fi
-        
-        echo_color "$BLUE" "🗃️  Running Prisma migration: $migration_name"
-        
-        case $PACKAGE_MANAGER in
-            bun)
-                bun prisma migrate dev --name "$migration_name"
-                ;;
-            pnpm)
-                pnpm prisma migrate dev --name "$migration_name"
-                ;;
-            npm)
-                npx prisma migrate dev --name "$migration_name"
-                ;;
-        esac
-        
-    elif [[ "$2" == "reset" ]]; then
-        echo_color "$BLUE" "🗃️  Resetting Prisma database..."
-        
-        case $PACKAGE_MANAGER in
-            bun)
-                bun prisma migrate reset
-                ;;
-            pnpm)
-                pnpm prisma migrate reset
-                ;;
-            npm)
-                npx prisma migrate reset
-                ;;
-        esac
-        
-    else
-        # Default Prisma commands
-        echo_color "$BLUE" "🗃️  Running Prisma commands with $PACKAGE_MANAGER..."
+    # Get all arguments after the prisma command
+    shift  # Remove 'prisma' from arguments
+    local args=("$@")
+    
+    # If no arguments provided, run default commands
+    if [[ ${#args[@]} -eq 0 ]]; then
+        echo_color "$BLUE" "🗃️  Running default Prisma commands with $PACKAGE_MANAGER..."
         
         case $PACKAGE_MANAGER in
             bun)
@@ -281,6 +286,21 @@ run_prisma() {
                 npx prisma db pull
                 ;;
         esac
+    else
+        # Pass all arguments to prisma
+        echo_color "$BLUE" "🗃️  Running: prisma ${args[*]}"
+        
+        case $PACKAGE_MANAGER in
+            bun)
+                bun prisma "${args[@]}"
+                ;;
+            pnpm)
+                pnpm prisma "${args[@]}"
+                ;;
+            npm)
+                npx prisma "${args[@]}"
+                ;;
+        esac
     fi
     
     echo_color "$GREEN" "✅ Prisma commands completed!"
@@ -290,41 +310,28 @@ run_prisma() {
 run_shadcn() {
     detect_package_manager
     
-    if [[ "$2" == "init" ]]; then
-        echo_color "$BLUE" "🎨 Initializing shadcn/ui..."
-        
-        case $PACKAGE_MANAGER in
-            bun)
-                bunx --bun shadcn@latest init
-                ;;
-            pnpm)
-                pnpm dlx shadcn@latest init
-                ;;
-            npm)
-                npx shadcn@latest init
-                ;;
-        esac
-        
-    elif [[ "$2" == "add" && -n "$3" ]]; then
-        component_name="$3"
-        echo_color "$BLUE" "🎨 Adding shadcn/ui component: $component_name"
-        
-        case $PACKAGE_MANAGER in
-            bun)
-                bunx --bun shadcn@latest add "$component_name"
-                ;;
-            pnpm)
-                pnpm dlx shadcn@latest add "$component_name"
-                ;;
-            npm)
-                npx shadcn@latest add "$component_name"
-                ;;
-        esac
-        
-    else
-        echo_color "$RED" "❌ Invalid shadcn command. Use 'xe shadcn init' or 'xe shadcn add <component>'"
+    # Get all arguments after the shadcn command
+    shift  # Remove 'shadcn' from arguments
+    local args=("$@")
+    
+    if [[ ${#args[@]} -eq 0 ]]; then
+        echo_color "$RED" "❌ Invalid shadcn command. Use 'xe shadcn init' or 'xe shadcn add <component> [options]'"
         exit 1
     fi
+    
+    echo_color "$BLUE" "🎨 Running: shadcn ${args[*]}"
+    
+    case $PACKAGE_MANAGER in
+        bun)
+            bunx --bun shadcn@latest "${args[@]}"
+            ;;
+        pnpm)
+            pnpm dlx shadcn@latest "${args[@]}"
+            ;;
+        npm)
+            npx shadcn@latest "${args[@]}"
+            ;;
+    esac
     
     echo_color "$GREEN" "✅ shadcn/ui command completed!"
 }
@@ -393,10 +400,10 @@ main() {
             run_dev "$@"
             ;;
         build)
-            run_build
+            run_build "$@"
             ;;
         lint)
-            run_lint
+            run_lint "$@"
             ;;
         prisma)
             run_prisma "$@"

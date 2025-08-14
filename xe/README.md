@@ -12,23 +12,29 @@ A modular Bash script that simplifies web development tasks by automatically det
 
 **Prerequisites:** macOS or Linux with Bash
 
-1. **Create the script file:**
-   ```bash
-   nano xe
-   ```
+### Quick Install (Recommended)
 
-2. **Copy and paste the xe script content, then save**
+Run this single command to install xe:
 
-3. **Make executable and install globally:**
-   ```bash
-   chmod +x xe
-   sudo mv xe /usr/local/bin/
-   ```
+```bash
+# If you've cloned the repo:
+bash ./xe/install.sh
 
-4. **Verify installation:**
-   ```bash
-   xe --help
-   ```
+# Or download and run in one command:
+curl -fsSL https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.sh | bash
+
+# Or with wget:
+wget -qO- https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.sh | bash
+```
+
+### Manual Installation
+
+If you prefer to install manually:
+
+1. Download the `xe` script
+2. Make it executable: `chmod +x xe`
+3. Move to your PATH: `sudo mv xe /usr/local/bin/`
+4. Verify: `xe --help`
 
 ## Commands
 

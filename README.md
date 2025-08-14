@@ -4,4 +4,11 @@ A collection of utility tools and scripts designed to make a developer's life ea
 
 ## Tools
 
-- **xe**: A web development script. A modular Bash script that simplifies web development tasks by automatically detecting your package manager (bun, pnpm, or npm) and running the appropriate commands.
+### xe
+A modular Bash script that auto-detects your package manager (bun, pnpm, or npm) and runs the appropriate commands.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.sh | bash
+```
+
+[See xe documentation →](./xe/README.md)
