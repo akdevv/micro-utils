@@ -10,5 +10,3 @@ A modular Bash script that auto-detects your package manager (bun, pnpm, or npm)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.sh | bash
 ```
-
-[See xe documentation →](./xe/README.md)
