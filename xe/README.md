@@ -27,6 +27,33 @@ curl -fsSL https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.
 wget -qO- https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.sh | bash
 ```
 
+If xe is already installed and you are piping the installer (so stdin is not interactive), pass flags after `--` to control overwrite:
+
+```bash
+# Auto-overwrite existing installation (non-interactive)
+curl -fsSL https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.sh | bash -s -- --yes
+
+# Never overwrite (will cancel if found)
+curl -fsSL https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.sh | bash -s -- --no-overwrite
+
+# Specify a custom install directory
+curl -fsSL https://raw.githubusercontent.com/akdevv/micro-utils/main/xe/install.sh | bash -s -- --install-dir /usr/local/bin
+```
+
+You can use the same flags locally:
+
+```bash
+bash ./xe/install.sh --yes               # force overwrite
+bash ./xe/install.sh --no-overwrite      # cancel if exists
+bash ./xe/install.sh --install-dir ~/.local/bin
+```
+
+Environment variable equivalents are also supported:
+
+```bash
+FORCE_OVERWRITE=1 INSTALL_DIR=/usr/local/bin bash ./xe/install.sh
+```
+
 ### Manual Installation
 
 If you prefer to install manually:

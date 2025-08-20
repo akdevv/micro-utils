@@ -9,12 +9,71 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Defaults / flags (can be overridden via CLI args or env)
+INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+FORCE_OVERWRITE=${FORCE_OVERWRITE:-0}
+SKIP_OVERWRITE=${SKIP_OVERWRITE:-0}
+
 # Helper function for colored output
 echo_color() {
     local color=$1
     local message=$2
     echo -e "${color}${message}${NC}"
 }
+
+# Prompt helper that works even when stdin is not a TTY (e.g., curl | bash)
+prompt_overwrite() {
+    # Forced accept
+    if [[ "$FORCE_OVERWRITE" == "1" ]]; then
+        return 0
+    fi
+
+    # Forced decline
+    if [[ "$SKIP_OVERWRITE" == "1" ]]; then
+        return 1
+    fi
+
+    local prompt_msg="Do you want to overwrite it? (y/n): "
+
+    # Interact with the user's terminal directly
+    if [[ -e /dev/tty ]]; then
+        printf "%s" "$prompt_msg" > /dev/tty
+        local response
+        # Read from the terminal, not from stdin (which may be a pipe)
+        read -r response < /dev/tty || true
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    # No TTY and not forced
+    echo_color "$YELLOW" "⚠️  Non-interactive shell detected. Re-run with --yes to auto-overwrite or --no-overwrite to cancel."
+    return 1
+}
+
+# Parse CLI arguments (works with: bash install.sh --yes, or curl ... | bash -s -- --yes)
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -y|--yes|--force)
+            FORCE_OVERWRITE=1
+            shift
+            ;;
+        -n|--no|--no-overwrite)
+            SKIP_OVERWRITE=1
+            shift
+            ;;
+        --install-dir)
+            INSTALL_DIR="$2"
+            shift 2
+            ;;
+        *)
+            echo_color "$YELLOW" "⚠️  Ignoring unknown option: $1"
+            shift
+            ;;
+    esac
+done
 
 # Main installation function
 install_xe() {
@@ -27,8 +86,8 @@ install_xe() {
         exit 1
     fi
     
-    # Determine installation directory
-    INSTALL_DIR="/usr/local/bin"
+    # Determine installation directory (can be overridden via --install-dir or env)
+    INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
     
     # Check if we need sudo for /usr/local/bin
     if [[ -w "$INSTALL_DIR" ]]; then
@@ -91,9 +150,7 @@ install_xe() {
     # Check if xe already exists
     if [[ -f "$INSTALL_DIR/xe" ]]; then
         echo_color "$YELLOW" "⚠️  xe is already installed at $INSTALL_DIR/xe"
-        echo -n "Do you want to overwrite it? (y/n): "
-        read -r response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        if ! prompt_overwrite; then
             echo_color "$RED" "❌ Installation cancelled"
             exit 1
         fi
