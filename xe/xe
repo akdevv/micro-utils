@@ -180,8 +180,11 @@ run_dev() {
         # Remove 'init' from args for the actual dev command
         unset 'args[0]'
     else
-        # Regular dev command - check for node_modules first
-        check_node_modules
+        # Regular dev command - ensure dependencies are installed
+        if [[ ! -d "node_modules" ]]; then
+            echo_color "$YELLOW" "⚠️  node_modules not found. Installing dependencies..."
+            run_install install
+        fi
         echo_color "$BLUE" "🌐 Starting development server with $PACKAGE_MANAGER..."
     fi
     
